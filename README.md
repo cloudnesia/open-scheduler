@@ -1,6 +1,7 @@
 # Problem
 
 Belum ada Open Source Scheduler buatan indonesia yang sangat customable
+
 Existing : 
 
 **Open Cluster** Management (OCM), Karmada di khususkan untuk kubernetes, belum untuk solusi umum
@@ -10,6 +11,8 @@ Volcano di khususkan untuk Ai
 **HashiCorp Nomad:** yang kita bangun semacam ini , tapi kita terbuka tidak terbatas jenis engine  container terntentu
 
 # Approach
+
+Pattern Control Plane vs Data Plane
 
 # Scope [Demo Version]
 
