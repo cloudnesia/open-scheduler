@@ -12,14 +12,14 @@ Volcano di khususkan untuk Ai
 
 # Approach
 
-Pattern Control Plane vs Data Plane
+Pattern Control Plane x Data Plane
 
 # Scope [Demo Version]
 
 - Simple Scheduler
 - Provisioning with incus
 
-# Control Plane vs Data Plane
+# Control Plane x Data Plane
 
 ## Analogi
 
