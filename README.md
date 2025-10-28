@@ -46,6 +46,6 @@ Ini adalah salah satu konsep terpenting dalam jaringan modern. Cara termudah unt
     
     Mengunakan konsep heartbeat , data plane yang akan mengabarkan kesehatan ke pusat
 
-<img width="803" height="345" alt="image3" src="https://github.com/user-attachments/assets/3188ba14-b49a-49d4-a1cf-a267e7ac0f2c" />
-<img width="771" height="231" alt="image2" src="https://github.com/user-attachments/assets/00d6432d-9e93-470d-bf25-f45a85332734" />
 <img width="999" height="521" alt="image" src="https://github.com/user-attachments/assets/d26cad68-f52f-4e6d-8bb8-907a48d2f963" />
+<img width="771" height="231" alt="image2" src="https://github.com/user-attachments/assets/00d6432d-9e93-470d-bf25-f45a85332734" />
+<img width="803" height="345" alt="image3" src="https://github.com/user-attachments/assets/3188ba14-b49a-49d4-a1cf-a267e7ac0f2c" />
