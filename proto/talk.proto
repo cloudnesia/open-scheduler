@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package talk;
+
+// Heartbeat message sent from NodeAgent to ControlPlane
+message HeartbeatRequest {
+  string node_id = 1;
+  int64 timestamp = 2;
+  map<string, string> metadata = 3;
+}
+
+message HeartbeatResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+// Request to get a job from the ControlPlane
+message GetJobRequest {
+  string node_id = 1;
+}
+
+// Job specification, inspired by Nomad job spec (simplified)
+message Job {
+  string job_id = 1;
+  string name = 2;
+  string type = 3;
+  string datacenters = 4; // comma-separated, for simplicity
+
+  repeated TaskGroup task_groups = 5;
+  map<string, string> meta = 6;
+}
+
+message TaskGroup {
+  string name = 1;
+  int32 count = 2;
+
+  repeated Task tasks = 3;
+}
+
+message Task {
+  string name = 1;
+  string driver = 2;
+  TaskConfig config = 3;
+  map<string, string> env = 4;
+}
+
+message TaskConfig {
+  // Key-value config for the task driver, for generality
+  map<string, string> options = 1;
+}
+
+message GetJobResponse {
+  bool has_job = 1;
+  Job job = 2;
+  string message = 3;
+}
+
+// Update status of a job from NodeAgent to ControlPlane
+message UpdateStatusRequest {
+  string node_id = 1;
+  string job_id = 2;
+  string status = 3; // e.g., "running", "completed", "failed"
+  string detail = 4;
+  int64 timestamp = 5;
+}
+
+message UpdateStatusResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+service NodeAgentService {
+  // NodeAgent sends a heartbeat to ControlPlane
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // NodeAgent requests a job from ControlPlane
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+
+  // NodeAgent sends job status update
+  rpc UpdateStatus(UpdateStatusRequest) returns (UpdateStatusResponse);
+}
+
