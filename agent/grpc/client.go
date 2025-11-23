@@ -16,6 +16,7 @@ import (
 
 type GrpcClient struct {
 	serverAddr string
+	tlsConfig  *TLSConfig
 	conn       *grpc.ClientConn
 	client     pb.CentroSchedulerServiceClient
 	mu         sync.RWMutex
@@ -28,6 +29,7 @@ func NewGrpcClient(serverAddr string) (*GrpcClient, error) {
 
 	return &GrpcClient{
 		serverAddr: serverAddr,
+		tlsConfig:  LoadTLSConfigFromEnv(),
 	}, nil
 }
 
@@ -45,10 +47,24 @@ func (c *GrpcClient) Connect(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+	// Build dial options based on TLS configuration
+	var opts []grpc.DialOption
+
+	if c.tlsConfig.Enabled {
+		// Use TLS credentials
+		creds, err := GetTLSCredentials(c.tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create TLS credentials: %w", err)
+		}
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+		log.Printf("[GrpcClient] Using TLS for secure communication")
+	} else {
+		// Use insecure connection (development only)
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		log.Printf("[GrpcClient] WARNING: Using insecure connection. Enable TLS in production!")
 	}
+
+	opts = append(opts, grpc.WithBlock())
 
 	conn, err := grpc.DialContext(ctx, c.serverAddr, opts...)
 	if err != nil {

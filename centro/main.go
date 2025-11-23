@@ -74,7 +74,21 @@ func main() {
 
 	log.Printf("[Centro] Starting gRPC server on %s", address)
 
-	grpcServer := grpc.NewServer()
+	// Load TLS configuration for gRPC server
+	tlsConfig := centrogrpc.LoadServerTLSConfigFromEnv()
+	var grpcServer *grpc.Server
+
+	if tlsConfig.Enabled {
+		creds, err := centrogrpc.GetServerTLSCredentials(tlsConfig)
+		if err != nil {
+			log.Fatalf("Failed to setup TLS credentials: %v", err)
+		}
+		grpcServer = grpc.NewServer(grpc.Creds(creds))
+		log.Printf("[Centro] TLS enabled for gRPC server")
+	} else {
+		grpcServer = grpc.NewServer()
+		log.Printf("[Centro] WARNING: TLS is disabled. Enable GRPC_SERVER_TLS_ENABLED in production!")
+	}
 
 	centroServer := centrogrpc.NewCentroServer(storage)
 	pb.RegisterCentroSchedulerServiceServer(grpcServer, centroServer)
@@ -88,23 +102,34 @@ func main() {
 		Handler: apiServer.GetRouter(),
 	}
 
+	// Create cancellable context for all background goroutines
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+
 	queue := scheduler.NewQueue(storage)
-	go queue.StartScheduler(context.Background())
+	go queue.StartScheduler(bgCtx)
 
 	go func() {
 		time.Sleep(5 * time.Second)
 		migration.SeedTestData(centroServer)
 	}()
 
+	// Status logging goroutine with proper cancellation
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
-		for range ticker.C {
-			nodeCount := centroServer.GetNodeCount()
-			queued, active, completed := centroServer.GetJobStats()
-			log.Printf("[Centro] Status - Nodes: %d, Jobs (Queued: %d, Active: %d, Completed: %d)",
-				nodeCount, queued, active, completed)
+		for {
+			select {
+			case <-bgCtx.Done():
+				log.Printf("[Centro] Status logging goroutine shutting down")
+				return
+			case <-ticker.C:
+				nodeCount := centroServer.GetNodeCount()
+				queued, active, completed := centroServer.GetJobStats()
+				log.Printf("[Centro] Status - Nodes: %d, Jobs (Queued: %d, Active: %d, Completed: %d)",
+					nodeCount, queued, active, completed)
+			}
 		}
 	}()
 
@@ -130,6 +155,12 @@ func main() {
 
 	<-sigChan
 	log.Println("\n[Centro] Shutting down gracefully...")
+
+	// Cancel all background goroutines first
+	bgCancel()
+	log.Printf("[Centro] Stopping background services...")
+	// Give goroutines a moment to exit cleanly
+	time.Sleep(100 * time.Millisecond)
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

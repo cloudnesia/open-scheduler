@@ -5,13 +5,23 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte("your-secret-key-change-in-production")
+var jwtSecret []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		log.Println("[Centro REST] WARNING: JWT_SECRET not set. Using development default. Change this in production!")
+		secret = "dev-secret-key-change-in-production"
+	}
+	jwtSecret = []byte(secret)
+}
 
 type Claims struct {
 	Username string `json:"username"`
@@ -91,9 +101,29 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		allowedOrigins := getAllowedOrigins()
+		origin := r.Header.Get("Origin")
+
+		// Check if origin is allowed
+		allowed := false
+		for _, o := range allowedOrigins {
+			if o == "*" || o == origin {
+				allowed = true
+				break
+			}
+		}
+
+		if allowed {
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			} else if len(allowedOrigins) > 0 && allowedOrigins[0] != "*" {
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigins[0])
+			}
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Max-Age", "3600")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -102,4 +132,18 @@ func CORSMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func getAllowedOrigins() []string {
+	originsStr := os.Getenv("ALLOWED_ORIGINS")
+	if originsStr == "" {
+		// Development default: allow localhost
+		return []string{"http://localhost:3000", "http://localhost:8080"}
+	}
+	// For deployment, set ALLOWED_ORIGINS=https://example.com,https://app.example.com
+	var origins []string
+	for _, o := range strings.Split(originsStr, ",") {
+		origins = append(origins, strings.TrimSpace(o))
+	}
+	return origins
 }

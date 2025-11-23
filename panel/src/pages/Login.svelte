@@ -4,8 +4,8 @@
   import { authStore } from '../stores/authStore';
   import { navigate } from 'svelte-routing';
 
-  let username = 'admin';
-  let password = 'admin123';
+  let username = '';
+  let password = '';
   let error = '';
   let loading = false;
 

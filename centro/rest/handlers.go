@@ -97,22 +97,27 @@ func (s *APIServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Username == "admin" && req.Password == "admin123" {
-		token, err := GenerateToken(req.Username, "admin")
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
-			return
-		}
-
-		respondWithJSON(w, http.StatusOK, LoginResponse{
-			Token:     token,
-			ExpiresIn: 86400,
-			Username:  req.Username,
-		})
+	// Verify credentials using user manager with bcrypt
+	um := GetUserManager()
+	user, err := um.VerifyCredentials(req.Username, req.Password)
+	if err != nil {
+		log.Printf("[Centro REST] Login failed for user %s: %v", req.Username, err)
+		respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
-	respondWithError(w, http.StatusUnauthorized, "Invalid credentials")
+	// Generate JWT token
+	token, err := GenerateToken(user.Username, user.Role)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to generate token")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, LoginResponse{
+		Token:     token,
+		ExpiresIn: 86400,
+		Username:  user.Username,
+	})
 }
 
 // handleListJobs godoc
@@ -294,8 +299,9 @@ func (s *APIServer) handleSubmitJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.JobName == "" {
-		respondWithError(w, http.StatusBadRequest, "Job name is required")
+	// Comprehensive input validation
+	if err := ValidateJobRequest(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Validation error: %v", err))
 		return
 	}
 	jobID := uuid.New().String()
@@ -373,16 +379,25 @@ func (s *APIServer) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	jobID := vars["id"]
 
+	if jobID == "" {
+		respondWithError(w, http.StatusBadRequest, "Job ID is required")
+		return
+	}
+
 	ctx := context.Background()
 
 	activeJob, err := s.storage.GetJobActive(ctx, jobID)
 	if err != nil {
 		log.Printf("[Centro REST] Failed to get active job: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve job")
+		return
 	}
 
 	events, err := s.storage.GetJobEvents(ctx, jobID)
 	if err != nil {
 		log.Printf("[Centro REST] Failed to get job events: %v", err)
+		// Events are secondary, continue without them
+		events = nil
 	}
 
 	if activeJob != nil {
@@ -400,8 +415,10 @@ func (s *APIServer) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	queueJob, err := s.storage.GetQueueJob(ctx, jobID)
-	if err != nil {
+	if err != nil && err.Error() != "job not found" {
 		log.Printf("[Centro REST] Failed to get queue job: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve job")
+		return
 	}
 
 	if queueJob != nil {
@@ -419,9 +436,10 @@ func (s *APIServer) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	failedJob, err := s.storage.GetFailedJob(ctx, jobID)
-	log.Printf("[Centro REST] Failed job: %v", failedJob)
-	if err != nil {
+	if err != nil && err.Error() != "job not found" {
 		log.Printf("[Centro REST] Failed to get failed job: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve job")
+		return
 	}
 
 	if failedJob != nil {
@@ -475,11 +493,18 @@ func (s *APIServer) handleGetJobStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	jobID := vars["id"]
 
+	if jobID == "" {
+		respondWithError(w, http.StatusBadRequest, "Job ID is required")
+		return
+	}
+
 	ctx := context.Background()
 
 	activeJob, err := s.storage.GetJobActive(ctx, jobID)
-	if err != nil {
+	if err != nil && err.Error() != "job not found" {
 		log.Printf("[Centro REST] Failed to get active job: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve job status")
+		return
 	}
 
 	if activeJob != nil {
@@ -494,8 +519,10 @@ func (s *APIServer) handleGetJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	historyJob, err := s.storage.GetJobHistory(ctx, jobID)
-	if err != nil {
+	if err != nil && err.Error() != "job not found" {
 		log.Printf("[Centro REST] Failed to get job history: %v", err)
+		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve job status")
+		return
 	}
 
 	if historyJob != nil {
